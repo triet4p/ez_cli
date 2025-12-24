@@ -5,7 +5,7 @@ pub mod cmd;
 // Define supported command
 #[derive(Debug)]
 pub enum Command {
-    Tree { path: String },
+    Tree { path: String, avoids: Vec<String>, },
     Find { pattern: String },
     Clean { pattern: String },
     Split { src: String, ratio: f32 },
@@ -33,7 +33,16 @@ impl Config {
                 // Default '.' if user hasn't input
                 let path = args.get(2)
                     .cloned().unwrap_or_else(|| String::from("."));
-                Command::Tree { path }
+
+                let avoids: Vec<_> = find_flag_value(args, "--avoid")
+                    .map(|s| {
+                        s.split(',')
+                            .map(|p| p.trim().to_string())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+
+                Command::Tree { path, avoids }
             },
             "find" => {
                 let pattern = args.get(2)
@@ -85,9 +94,9 @@ fn find_flag_value(args: &[String], flag: &str) -> Option<String> {
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     match config.cmd {
-        Command::Tree { path } => {
+        Command::Tree { path, avoids } => {
             println!("🌳 Drawing directory tree at: '{}'...", path);
-            cmd::tree::draw(&path)?;
+            cmd::tree::draw(&path, &avoids)?;
         },
         Command::Find { pattern } => {
             println!("🔍 Searching for files matching: '{}'", pattern);
@@ -112,9 +121,9 @@ fn print_help() {
     println!("🚀 EZ_CLI - The AI Engineer's Swiss Army Knife");
     println!("----------------------------------------------");
     println!("Usage:");
-    println!("  ez_cli tree [path]                : 🌳 Show directory tree");
-    println!("  ez_cli find <pattern>             : 🔍 Find files");
-    println!("  ez_cli clean <pattern>            : 🗑️ Clean junk files");
-    println!("  ez_cli split <src> [ratio]        : ✂️ Split Train/Val (default ratio 0.8)");
-    println!("  ez_cli env <key> <val> --group <g>: 📝 Manage environment variables");
+    println!("  ez_cli tree [path] --avoid [avoids]  : 🌳 Show directory tree");
+    println!("  ez_cli find <pattern>                : 🔍 Find files");
+    println!("  ez_cli clean <pattern>               : 🗑️ Clean junk files");
+    println!("  ez_cli split <src> [ratio]           : ✂️ Split Train/Val (default ratio 0.8)");
+    println!("  ez_cli env <key> <val> --group <g>   : 📝 Manage environment variables");
 }

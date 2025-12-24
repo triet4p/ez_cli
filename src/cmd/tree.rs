@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 use std::io;
+use glob::Pattern;
 
 // UI Config
 // Mid branch
@@ -15,7 +16,7 @@ const BLANK: &str= "    ";
 /// Recursive func
 /// - dir: Path to current directory.
 /// - prefix: Prefix chain to align (ex: "│   ├── ")
-fn visit_dirs(dir: &Path, prefix: &str) -> io::Result<()> {
+fn visit_dirs(dir: &Path, prefix: &str, avoids: &[String]) -> io::Result<()> {
     // Read dir content
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
@@ -30,7 +31,16 @@ fn visit_dirs(dir: &Path, prefix: &str) -> io::Result<()> {
 
     // Filter and add to vector
     let mut entries_vec: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+    entries_vec.retain(|entry| {
+        let file_name = entry.file_name();
+        let name_str = file_name.to_string_lossy();
 
+        let should_avoid = avoids.iter().any(|pattern| {
+            Pattern::new(pattern).map(|p| p.matches(&name_str)).unwrap_or(false)
+        });
+
+        !should_avoid
+    });
     entries_vec.sort_by_key(|e| e.file_name());
 
     let count = entries_vec.len();
@@ -48,14 +58,14 @@ fn visit_dirs(dir: &Path, prefix: &str) -> io::Result<()> {
             let child_prefix = if is_last { BLANK } else { LINE };
             let new_prefix = format!("{}{}", prefix, child_prefix);
 
-            visit_dirs(&entry.path(), &new_prefix)?;
+            visit_dirs(&entry.path(), &new_prefix, avoids)?;
         }
     }
     Ok(())
 }
 
 /// Draw a tree
-pub fn draw(path_str: &str) -> io::Result<()> {
+pub fn draw(path_str: &str, avoids: &[String]) -> io::Result<()> {
     let root_path = Path::new(path_str);
     if !root_path.exists() {
         return Err(io::Error::new(io::ErrorKind::NotFound, "❌ Path not found"));
@@ -63,5 +73,5 @@ pub fn draw(path_str: &str) -> io::Result<()> {
 
     println!("{}", root_path.file_name().unwrap_or(root_path.as_os_str()).to_string_lossy());
 
-    visit_dirs(root_path, "")
+    visit_dirs(root_path, "", avoids)
 }
