@@ -1,5 +1,7 @@
 use std::error::Error;
 
+pub mod cmd;
+
 // Define supported command
 #[derive(Debug)]
 pub enum Command {
@@ -85,7 +87,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     match config.cmd {
         Command::Tree { path } => {
             println!("🌳 Drawing directory tree at: '{}'...", path);
-            // TODO: Implement recursion logic later
+            cmd::tree::draw(&path)?;
         },
         Command::Find { pattern } => {
             println!("🔍 Searching for files matching: '{}'", pattern);
