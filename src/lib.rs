@@ -5,7 +5,7 @@ pub mod cmd;
 // Define supported command
 #[derive(Debug)]
 pub enum Command {
-    Tree { path: String, avoids: Vec<String>, },
+    Tree { path: String, include: Vec<String>, exclude: Vec<String> },
     Find { pattern: String },
     Clean { pattern: String },
     Split { src: String, ratio: f32 },
@@ -34,15 +34,14 @@ impl Config {
                 let path = args.get(2)
                     .cloned().unwrap_or_else(|| String::from("."));
 
-                let avoids: Vec<_> = find_flag_value(args, "--avoid")
-                    .map(|s| {
-                        s.split(',')
-                            .map(|p| p.trim().to_string())
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                let include_patterns = find_flag_value(args, "--include");
+                let include = convert_list_patterns(&include_patterns, ",");
+                println!("{:?}", &include);
 
-                Command::Tree { path, avoids }
+                let exclude_patterns = find_flag_value(args, "--exclude");
+                let exclude = convert_list_patterns(&exclude_patterns, ",");
+
+                Command::Tree { path, include, exclude }
             },
             "find" => {
                 let pattern = args.get(2)
@@ -83,6 +82,16 @@ impl Config {
     }
 }
 
+// Helper func: Convert list string
+fn convert_list_patterns(pattern_opt: &Option<String>, delimiter: &str) -> Vec<String> {
+    match pattern_opt {
+        Some(s) => s.split(delimiter)
+                    .map(|p| p.trim().to_string())
+                    .collect(),
+        None => Vec::new(), // Trả về vector rỗng nếu không có
+    }
+}
+
 // Helper func: Find value after a flag
 fn find_flag_value(args: &[String], flag: &str) -> Option<String> {
     if let Some(index) = args.iter().position(|x| x == flag) {
@@ -94,9 +103,9 @@ fn find_flag_value(args: &[String], flag: &str) -> Option<String> {
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     match config.cmd {
-        Command::Tree { path, avoids } => {
+        Command::Tree { path, include, exclude } => {
             println!("🌳 Drawing directory tree at: '{}'...", path);
-            cmd::tree::draw(&path, &avoids)?;
+            cmd::tree::draw(&path, &include, &exclude)?;
         },
         Command::Find { pattern } => {
             println!("🔍 Searching for files matching: '{}'", pattern);
@@ -121,9 +130,9 @@ fn print_help() {
     println!("🚀 EZ_CLI - The AI Engineer's Swiss Army Knife");
     println!("----------------------------------------------");
     println!("Usage:");
-    println!("  ez_cli tree [path] --avoid [avoids]  : 🌳 Show directory tree");
-    println!("  ez_cli find <pattern>                : 🔍 Find files");
-    println!("  ez_cli clean <pattern>               : 🗑️ Clean junk files");
-    println!("  ez_cli split <src> [ratio]           : ✂️ Split Train/Val (default ratio 0.8)");
-    println!("  ez_cli env <key> <val> --group <g>   : 📝 Manage environment variables");
+    println!("  ez_cli tree [path] --include [includes] --exclude [excludes]  : 🌳 Show directory tree");
+    println!("  ez_cli find <pattern>                                         : 🔍 Find files");
+    println!("  ez_cli clean <pattern>                                        : 🗑️ Clean junk files");
+    println!("  ez_cli split <src> [ratio]                                    : ✂️ Split Train/Val (default ratio 0.8)");
+    println!("  ez_cli env <key> <val> --group <g>                            : 📝 Manage environment variables");
 }

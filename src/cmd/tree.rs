@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{ Path, PathBuf };
 use std::io;
 use glob::Pattern;
 
@@ -13,65 +13,137 @@ const CORNER: &str = "└── ";
 // Blank when end branch
 const BLANK: &str= "    ";
 
-/// Recursive func
-/// - dir: Path to current directory.
-/// - prefix: Prefix chain to align (ex: "│   ├── ")
-fn visit_dirs(dir: &Path, prefix: &str, avoids: &[String]) -> io::Result<()> {
-    // Read dir content
-    let entries = match fs::read_dir(dir) {
+#[derive(Debug)]
+struct Node {
+    name: String,
+    path: PathBuf,
+    is_dir: bool,
+    children: Vec<Node>, 
+}
+
+struct TreeFilter {
+    includes: Vec<Pattern>,
+    excludes: Vec<Pattern>,
+}
+
+impl TreeFilter {
+    fn is_excluded(&self, name: &str) -> bool {
+        self.excludes.iter().any(|p| p.matches(name))
+    }
+
+    fn is_included(&self, name: &str) -> bool {
+        if self.includes.is_empty() {
+            return true; // Không có whitelist -> Lấy hết
+        }
+        self.includes.iter().any(|p| p.matches(name))
+    }
+}
+
+fn build_tree(path: &Path, filter: &TreeFilter) -> Option<Node> {
+    let name = path.file_name()
+        .unwrap_or(path.as_os_str()) 
+        .to_string_lossy()
+        .to_string();
+
+    let is_dir = path.is_dir();
+
+    if filter.is_excluded(&name) {
+        return None;
+    }
+
+    if !is_dir {
+        if filter.is_included(&name) {
+            return Some(Node {
+                name,
+                path: path.to_path_buf(),
+                is_dir: false,
+                children: Vec::new(),
+            });
+        } else {
+            return None; 
+        }
+    }
+
+    let entries = match fs::read_dir(path) {
         Ok(e) => e,
         Err(e) => {
             if e.kind() == io::ErrorKind::PermissionDenied {
-                eprintln!("{}⚠️  Warning: Permission denied accessing {:?}", prefix, dir);
-                return Ok(());
+                eprintln!("⚠️  Warning: Permission denied accessing {:?}", path);
             }
-            return Err(e);
+            return None;
         }
     };
+    
+    let mut children: Vec<Node> = Vec::new();
 
-    // Filter and add to vector
-    let mut entries_vec: Vec<_> = entries.filter_map(|e| e.ok()).collect();
-    entries_vec.retain(|entry| {
-        let file_name = entry.file_name();
-        let name_str = file_name.to_string_lossy();
-
-        let should_avoid = avoids.iter().any(|pattern| {
-            Pattern::new(pattern).map(|p| p.matches(&name_str)).unwrap_or(false)
-        });
-
-        !should_avoid
-    });
-    entries_vec.sort_by_key(|e| e.file_name());
-
-    let count = entries_vec.len();
-    for (i, entry) in entries_vec.iter().enumerate() {
-        let is_last = i == count - 1;
-        let file_name = entry.file_name();
-        let name_str = file_name.to_string_lossy();
-        let connector = if is_last { CORNER } else { EDGE };
-
-        println!("{}{}{}", prefix, connector, name_str);
-
-        // Recursive
-        if entry.path().is_dir() {
-            // Prepare prefix
-            let child_prefix = if is_last { BLANK } else { LINE };
-            let new_prefix = format!("{}{}", prefix, child_prefix);
-
-            visit_dirs(&entry.path(), &new_prefix, avoids)?;
+    for entry in entries.flatten() { 
+        if let Some(child_node) = build_tree(&entry.path(), filter) {
+            children.push(child_node);
         }
     }
-    Ok(())
+
+    if children.is_empty() && is_dir {
+        return None; // Folder rỗng -> Cắt bỏ luôn
+    }
+
+    // Sắp xếp con cho đẹp
+    children.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Some(Node {
+        name,
+        path: path.to_path_buf(),
+        is_dir: is_dir,
+        children,
+    })
+}
+
+fn print_tree(nodes: &[Node], prefix: &str) {
+    let count = nodes.len();
+    for (i, node) in nodes.iter().enumerate() {
+        let is_last = i == count - 1;
+        let connector = if is_last { CORNER } else { EDGE };
+
+        println!("{}{}{}", prefix, connector, node.name);
+
+        if node.is_dir {
+            let child_prefix = if is_last { BLANK } else { LINE };
+            let new_prefix = format!("{}{}", prefix, child_prefix);
+            print_tree(&node.children, &new_prefix);
+        }
+    }
 }
 
 /// Draw a tree
-pub fn draw(path_str: &str, avoids: &[String]) -> io::Result<()> {
+pub fn draw(path_str: &str, includes: &[String], excludes: &[String]) -> io::Result<()> {
     let root_path = Path::new(path_str);
     if !root_path.exists() {
         return Err(io::Error::new(io::ErrorKind::NotFound, "❌ Path not found"));
     }
 
+    let compile_patterns = |raw_lst: &[String]| -> Vec<Pattern> {
+        raw_lst.iter()
+            .filter_map(|s| Pattern::new(s).ok())
+            .collect()
+    };
+
+    let filter = TreeFilter {
+        includes: compile_patterns(includes),
+        excludes: compile_patterns(excludes),
+    };
+
     println!("{}", root_path.file_name().unwrap_or(root_path.as_os_str()).to_string_lossy());
 
-    visit_dirs(root_path, "", avoids)
+    println!("Building tree for: {}", root_path.display());
+
+    // 2. GIAI ĐOẠN 1: Xây cây và Cắt tỉa (Build & Prune)
+    // Nếu trả về None nghĩa là thư mục gốc cũng rỗng (không có file nào khớp)
+    if let Some(root_node) = build_tree(root_path, &filter) {
+        // 3. GIAI ĐOẠN 2: In cây (Print)
+        println!("{}", root_node.name); // In gốc
+        print_tree(&root_node.children, ""); // In con
+    } else {
+        println!("(No files found matching patterns)");
+    }
+
+    Ok(())
 }
