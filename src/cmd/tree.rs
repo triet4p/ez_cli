@@ -33,7 +33,7 @@ impl TreeFilter {
 
     fn is_included(&self, name: &str) -> bool {
         if self.includes.is_empty() {
-            return true; // Không có whitelist -> Lấy hết
+            return true; 
         }
         self.includes.iter().any(|p| p.matches(name))
     }
@@ -83,7 +83,7 @@ fn build_tree(path: &Path, filter: &TreeFilter) -> Option<Node> {
     }
 
     if children.is_empty() && is_dir {
-        return None; // Folder rỗng -> Cắt bỏ luôn
+        return None;
     }
 
     // Sắp xếp con cho đẹp
@@ -135,12 +135,9 @@ pub fn draw(path_str: &str, includes: &[String], excludes: &[String]) -> io::Res
 
     println!("Building tree for: {}", root_path.display());
 
-    // 2. GIAI ĐOẠN 1: Xây cây và Cắt tỉa (Build & Prune)
-    // Nếu trả về None nghĩa là thư mục gốc cũng rỗng (không có file nào khớp)
     if let Some(root_node) = build_tree(root_path, &filter) {
-        // 3. GIAI ĐOẠN 2: In cây (Print)
-        println!("{}", root_node.name); // In gốc
-        print_tree(&root_node.children, ""); // In con
+        println!("{}", root_node.name); 
+        print_tree(&root_node.children, ""); 
     } else {
         println!("(No files found matching patterns)");
     }
