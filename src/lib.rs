@@ -6,8 +6,8 @@ pub mod cmd;
 #[derive(Debug)]
 pub enum Command {
     Tree { path: String, include: Vec<String>, exclude: Vec<String> },
-    Find { pattern: String },
-    Clean { pattern: String },
+    Find { pattern: String, root_dir: String },
+    Clean { pattern: String, root_dir: String },
     Split { src: String, ratio: f32 },
     Env { key: String, val: String, group: String },
     Help,
@@ -46,12 +46,18 @@ impl Config {
             "find" => {
                 let pattern = args.get(2)
                     .cloned().ok_or("❌Missing pattern (ex *.pyc)");
-                Command::Find { pattern: pattern? }
+
+                let root_dir = args.get(3)
+                    .cloned().unwrap_or_else(|| String::from("."));
+                Command::Find { pattern: pattern?, root_dir: root_dir }
             },
             "clean" => {
                 let pattern = args.get(2)
                     .cloned().ok_or("❌Missing pattern (ex *.pyc)");
-                Command::Clean { pattern: pattern? }
+
+                let root_dir = args.get(3)
+                    .cloned().unwrap_or_else(|| String::from("."));
+                Command::Clean { pattern: pattern?, root_dir }
             },
             "split" => {
                 let src = args.get(2)
@@ -107,11 +113,13 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             println!("🌳 Drawing directory tree at: '{}'...", path);
             cmd::tree::draw(&path, &include, &exclude)?;
         },
-        Command::Find { pattern } => {
+        Command::Find { pattern, root_dir } => {
             println!("🔍 Searching for files matching: '{}'", pattern);
+            cmd::find::run(&pattern, &root_dir)?;
         },
-        Command::Clean { pattern } => {
+        Command::Clean { pattern, root_dir } => {
             println!("🗑️ Cleaning up files matching: '{}'", pattern);
+            cmd::clean::run(&pattern, &root_dir)?;
         },
         Command::Split { src, ratio } => {
             println!("✂️ Splitting dataset '{}' (Train: {}%)", src, ratio * 100.0);
@@ -131,8 +139,8 @@ fn print_help() {
     println!("----------------------------------------------");
     println!("Usage:");
     println!("  ez_cli tree [path] --include [includes] --exclude [excludes]  : 🌳 Show directory tree");
-    println!("  ez_cli find <pattern>                                         : 🔍 Find files");
-    println!("  ez_cli clean <pattern>                                        : 🗑️ Clean junk files");
+    println!("  ez_cli find <pattern> <root_dir>                              : 🔍 Find files");
+    println!("  ez_cli clean <pattern> <root_dir>                             : 🗑️ Clean junk files");
     println!("  ez_cli split <src> [ratio]                                    : ✂️ Split Train/Val (default ratio 0.8)");
     println!("  ez_cli env <key> <val> --group <g>                            : 📝 Manage environment variables");
 }
